@@ -1,0 +1,134 @@
+/* Mobile-first, festive card feel (vanilla CSS) */
+:root {
+  --bg: #2b180c;
+  --panel: rgba(255, 248, 240, 0.9);
+  --panel2: rgba(255, 255, 255, 0.5);
+  --text: #2f190c;
+  --muted: rgba(109, 73, 51, 0.78);
+  --accent: #c72f38;
+  --good: #3f8f63;
+  --danger: #b33939;
+  --shadow: 0 28px 60px rgba(28, 10, 0, 0.55);
+  --radius: 22px;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --sans: "Cormorant Garamond", "Times New Roman", serif;
+  --serif: "Cinzel", "Cormorant Garamond", serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--text);
+  background: radial-gradient(
+      900px 620px at 12% 0%,
+      rgba(224, 164, 96, 0.2),
+      transparent 60%
+    ),
+    radial-gradient(
+      1100px 700px at 88% 0%,
+      rgba(198, 63, 63, 0.2),
+      transparent 60%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(45, 26, 14, 0.75),
+      rgba(45, 26, 14, 0.75) 16px,
+      rgba(40, 22, 11, 0.85) 16px,
+      rgba(40, 22, 11, 0.85) 32px
+    ),
+    linear-gradient(180deg, #3a2111 0%, #200f08 100%);
+  background-attachment: fixed;
+}
+
+.app-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 18px 44px;
+  position: relative;
+}
+
+.hero {
+  text-align: center;
+  margin: 12px 0 20px;
+  padding: 20px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 248, 240, 0.92),
+    rgba(255, 234, 213, 0.82)
+  );
+  border: 3px solid rgba(199, 47, 56, 0.35);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+.hero::before,
+.hero::after {
+  content: "";
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(
+    circle at center,
+    rgba(199, 47, 56, 0.28),
+    transparent 70%
+  );
+  filter: blur(0.5px);
+  z-index: 0;
+}
+.hero::before {
+  top: -40px;
+  left: -30px;
+}
+.hero::after {
+  bottom: -50px;
+  right: -20px;
+}
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+.hero h1 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 600;
+  color: #b02a31;
+  font-size: clamp(32px, 6vw, 52px);
+  letter-spacing: 1.6px;
+  text-shadow: 0 6px 14px rgba(176, 42, 49, 0.25);
+}
+.sub {
+  margin: 10px 0 0;
+  color: rgba(92, 63, 42, 0.9);
+  font-size: 16px;
+  font-weight: 500;
+  font-family: var(--sans);
+  letter-spacing: 0.4px;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 24px;
+  padding: 12px 14px;
+  color: rgba(248, 236, 224, 0.88);
+  font-size: 13px;
+  font-family: var(--sans);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+  display: inline-block;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+@media (min-width: 760px) {
+  .app-shell {
+    padding: 34px 22px 56px;
+  }
+}
