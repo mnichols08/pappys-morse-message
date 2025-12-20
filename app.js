@@ -414,6 +414,7 @@ class MorsePlayer extends HTMLElement {
     this.state.showRevealModal = false;
     this._revealedWordIndices = new Set();
     this._hasCelebrated = false;
+    this._setMinimized(false);
 
     const bg = this.getAttribute("background-src") || "";
     const card = this.shadowRoot.querySelector(".card");
@@ -439,6 +440,11 @@ class MorsePlayer extends HTMLElement {
           border: 6px solid rgba(199, 47, 56, 0.45);
           box-shadow: var(--shadow);
           overflow: visible;
+          transition: transform 180ms ease, padding 180ms ease;
+        }
+
+        .card.minimized{
+          padding: 14px;
         }
 
         .card::before{
@@ -474,6 +480,43 @@ class MorsePlayer extends HTMLElement {
           border-radius: calc(var(--radius) - 6px);
           background: rgba(255, 248, 240, 0.68);
           box-shadow: inset 0 0 28px rgba(255, 239, 220, 0.55);
+        }
+
+        .card.minimized .content{
+          display: none;
+        }
+
+        .minimizedNotice{
+          position: relative;
+          z-index: 1;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+          border-radius: calc(var(--radius) - 2px);
+          background: linear-gradient(160deg, rgba(255,255,255,0.95), rgba(255, 236, 213, 0.9));
+          border: 2px dashed rgba(62, 110, 76, 0.45);
+          box-shadow: inset 0 0 18px rgba(62, 110, 76, 0.18);
+          text-align: center;
+          gap: 14px;
+          flex-direction: column;
+        }
+
+        .minimizedNotice h3{
+          margin: 0;
+          font-size: 20px;
+          font-family: var(--serif);
+          color: #2f4f3a;
+        }
+
+        .minimizedNotice p{
+          margin: 0;
+          font-size: 14px;
+          color: rgba(109, 73, 51, 0.82);
+        }
+
+        .card.minimized .minimizedNotice{
+          display: flex;
         }
 
         .grid{
@@ -887,7 +930,12 @@ class MorsePlayer extends HTMLElement {
 
       <section class="card" aria-label="Morse Player Card">
         <div class="confettiLayer" id="confettiLayer" aria-hidden="true"></div>
-        <div class="content">
+        <div class="minimizedNotice" id="minimizedNotice" hidden aria-hidden="true">
+          <h3>Message decoded!</h3>
+          <p>The gallery is now open. Scroll down to enjoy the memories.</p>
+          <button id="restoreBtn" type="button">Reopen puzzle</button>
+        </div>
+        <div class="content" id="cardContent" aria-hidden="false">
           <div class="grid">
             <div class="panel">
               <div class="title">
@@ -1006,6 +1054,10 @@ class MorsePlayer extends HTMLElement {
     this._modalConfirm = $("#modalConfirm");
     this._modalCancel = $("#modalCancel");
     this._confettiLayer = $("#confettiLayer");
+    this._cardSection = this.shadowRoot.querySelector(".card");
+    this._cardContent = $("#cardContent");
+    this._minimizedNotice = $("#minimizedNotice");
+    this._restoreBtn = $("#restoreBtn");
 
     const playBtn = $("#playBtn");
     const stopBtn = $("#stopBtn");
@@ -1116,6 +1168,12 @@ class MorsePlayer extends HTMLElement {
         this._closeRevealModal();
       }
     });
+
+    if (this._restoreBtn) {
+      this._restoreBtn.addEventListener("click", () => this.restore());
+    }
+
+    this._setMinimized(this.classList.contains("minimized"));
 
     this._applyModalState();
 
@@ -1513,7 +1571,62 @@ class MorsePlayer extends HTMLElement {
   _triggerCelebration() {
     if (this._hasCelebrated) return;
     this._hasCelebrated = true;
+    this._setMinimized(true);
     this._launchConfetti();
+    this.dispatchEvent(
+      new CustomEvent("morse-solved", { bubbles: true, composed: true })
+    );
+  }
+
+  minimize() {
+    this._setMinimized(true);
+  }
+
+  restore() {
+    this._setMinimized(false);
+    if (this._guessInput) {
+      this._guessInput.focus({ preventScroll: true });
+    }
+  }
+
+  _setMinimized(minimize) {
+    const minimized = !!minimize;
+    if (minimized) {
+      this.classList.add("minimized");
+      this.setAttribute("data-minimized", "true");
+    } else {
+      this.classList.remove("minimized");
+      this.removeAttribute("data-minimized");
+    }
+
+    if (this._cardSection) {
+      this._cardSection.classList.toggle("minimized", minimized);
+    }
+
+    if (this._cardContent) {
+      this._cardContent.hidden = minimized;
+      this._cardContent.setAttribute(
+        "aria-hidden",
+        minimized ? "true" : "false"
+      );
+    }
+
+    if (this._minimizedNotice) {
+      if (minimized) {
+        this._minimizedNotice.hidden = false;
+        this._minimizedNotice.removeAttribute("hidden");
+        this._minimizedNotice.setAttribute("aria-hidden", "false");
+        requestAnimationFrame(() => {
+          if (this._restoreBtn) {
+            this._restoreBtn.focus({ preventScroll: true });
+          }
+        });
+      } else {
+        this._minimizedNotice.hidden = true;
+        this._minimizedNotice.setAttribute("hidden", "");
+        this._minimizedNotice.setAttribute("aria-hidden", "true");
+      }
+    }
   }
 
   _launchConfetti() {
@@ -1575,3 +1688,385 @@ class MorsePlayer extends HTMLElement {
 }
 
 customElements.define("morse-player", MorsePlayer);
+
+class PhotoGallery extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._photos = [];
+  }
+
+  static get observedAttributes() {
+    return ["data-images"];
+  }
+
+  connectedCallback() {
+    this._applyHiddenState();
+    this._hydratePhotos(this.getAttribute("data-images"));
+    this._render();
+  }
+
+  attributeChangedCallback(name, _oldVal, newVal) {
+    if (name === "data-images") {
+      this._hydratePhotos(newVal);
+      this._render();
+    }
+  }
+
+  reveal() {
+    if (!this.hasAttribute("hidden")) return;
+    this.removeAttribute("hidden");
+    this.classList.add("is-visible");
+  }
+
+  _applyHiddenState() {
+    if (!this.hasAttribute("hidden")) {
+      this.setAttribute("hidden", "");
+    }
+  }
+
+  _hydratePhotos(raw) {
+    if (!raw) {
+      this._photos = [
+        {
+          src: "images/festive-card.png",
+          alt: "Festive holiday postcard illustration",
+          title: "Holiday Keepsake",
+          description:
+            "Pappy's treasured Morse card framed for our family album.",
+        },
+      ];
+      return;
+    }
+
+    const parsed = raw
+      .split(";")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [src, title = "", description = "", alt = ""] = entry
+          .split("|")
+          .map((part) => part.trim());
+        return {
+          src,
+          title: title || "Holiday memory",
+          description: description || "",
+          alt: alt || title || "Gallery photo",
+        };
+      })
+      .filter((item) => !!item.src);
+
+    this._photos = parsed.length ? parsed : this._photos;
+  }
+
+  _render() {
+    const photos = this._photos;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host{
+          display:block;
+          margin: 40px auto 0;
+          max-width: 900px;
+          padding: 0 20px 40px;
+        }
+
+        :host([hidden]){
+          display:none !important;
+        }
+
+        :host(.is-visible) .gallery{
+          animation: galleryReveal 420ms ease-out forwards;
+        }
+
+        h2{
+          font-family: var(--serif, 'Cormorant Garamond', serif);
+          font-size: 28px;
+          color: #b02a31;
+          text-align:center;
+          margin: 0 0 12px 0;
+        }
+
+        p.lead{
+          text-align:center;
+          color: rgba(109, 73, 51, 0.82);
+          margin: 0 0 26px 0;
+          font-size: 15px;
+        }
+
+        .gallery{
+          display:grid;
+          gap: 16px;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          opacity: 0;
+          transform: translateY(12px);
+        }
+
+        figure{
+          margin:0;
+          background: linear-gradient(160deg, rgba(255,255,255,0.94), rgba(255,237,216,0.86));
+          border-radius: 18px;
+          padding: 14px;
+          border: 1px solid rgba(199, 47, 56, 0.24);
+          box-shadow: 0 16px 28px rgba(0,0,0,0.08);
+          display:flex;
+          flex-direction:column;
+          gap: 12px;
+        }
+
+        img{
+          width:100%;
+          height: 180px;
+          object-fit: cover;
+          border-radius: 12px;
+          border: 2px solid rgba(62, 110, 76, 0.32);
+          background: rgba(62,110,76,0.08);
+        }
+
+        figcaption{
+          display:grid;
+          gap:6px;
+        }
+
+        figcaption strong{
+          font-family: var(--serif, 'Cormorant Garamond', serif);
+          font-size: 18px;
+          color: #2f4f3a;
+        }
+
+        figcaption span{
+          font-size: 13px;
+          color: rgba(109, 73, 51, 0.78);
+          line-height: 1.5;
+        }
+
+        @keyframes galleryReveal{
+          0%{
+            opacity: 0;
+            transform: translateY(12px);
+          }
+          100%{
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      </style>
+      <section aria-label="Family photo gallery">
+        <h2>Holiday Photo Gallery</h2>
+        <p class="lead">A peek behind the scenes once the Morse puzzle is cracked.</p>
+        <div class="gallery">
+          ${photos
+            .map(
+              (photo) => `
+                <figure>
+                  <img src="${photo.src}" alt="${photo.alt}" loading="lazy" />
+                  <figcaption>
+                    <strong>${photo.title}</strong>
+                    <span>${photo.description}</span>
+                  </figcaption>
+                </figure>
+              `
+            )
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+}
+
+customElements.define("photo-gallery", PhotoGallery);
+
+class PrizeModal extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._rendered = false;
+    this._handleKeydown = this._handleKeydown.bind(this);
+    this._hideAfterTransition = this._hideAfterTransition.bind(this);
+    this._hideTimer = null;
+    this._previousFocus = null;
+  }
+
+  connectedCallback() {
+    if (!this._rendered) {
+      this._render();
+      this._rendered = true;
+    }
+  }
+
+  show(message = "See Benny Boo For Your Prize") {
+    if (!this._rendered) {
+      this._render();
+    }
+    if (this._hideTimer && typeof window !== "undefined") {
+      window.clearTimeout(this._hideTimer);
+      this._hideTimer = null;
+    }
+    this._setMessage(message);
+    this.removeAttribute("hidden");
+    if (this._backdrop) this._backdrop.classList.add("show");
+    if (this._dialog) this._dialog.classList.add("show");
+    this._previousFocus =
+      (typeof document !== "undefined" && document.activeElement) || null;
+    requestAnimationFrame(() => {
+      if (this._closeBtn) {
+        this._closeBtn.focus({ preventScroll: true });
+      }
+    });
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", this._handleKeydown);
+    }
+  }
+
+  hide() {
+    if (!this._rendered || this.hasAttribute("hidden")) return;
+    if (this._backdrop) this._backdrop.classList.remove("show");
+    if (this._dialog) this._dialog.classList.remove("show");
+    if (typeof document !== "undefined") {
+      document.removeEventListener("keydown", this._handleKeydown);
+    }
+    if (typeof window !== "undefined") {
+      this._hideTimer = window.setTimeout(this._hideAfterTransition, 220);
+    } else {
+      this._hideAfterTransition();
+    }
+  }
+
+  _hideAfterTransition() {
+    this._hideTimer = null;
+    this.setAttribute("hidden", "");
+    if (this._previousFocus && this._previousFocus.focus) {
+      try {
+        this._previousFocus.focus({ preventScroll: true });
+      } catch (err) {
+        // ignore focus errors if element is gone
+      }
+    }
+    this._previousFocus = null;
+  }
+
+  _render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host{
+          position: fixed;
+          inset: 0;
+          display: none;
+          z-index: 60;
+        }
+
+        :host(:not([hidden])){
+          display: block;
+        }
+
+        .backdrop{
+          position: absolute;
+          inset: 0;
+          background: rgba(33, 20, 12, 0.65);
+          backdrop-filter: blur(3px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 200ms ease, visibility 200ms ease;
+        }
+
+        .backdrop.show{
+          opacity: 1;
+          visibility: visible;
+        }
+
+        .dialog{
+          background: linear-gradient(150deg, rgba(255,255,255,0.97), rgba(255, 235, 214, 0.92));
+          border-radius: 18px;
+          padding: 26px;
+          border: 2px solid rgba(199, 47, 56, 0.35);
+          box-shadow: 0 30px 45px rgba(0,0,0,0.22);
+          width: min(360px, 88%);
+          text-align: center;
+          transform: translateY(10px) scale(0.95);
+          opacity: 0;
+          transition: transform 200ms ease, opacity 200ms ease;
+        }
+
+        .dialog.show{
+          transform: translateY(0) scale(1);
+          opacity: 1;
+        }
+
+        h3{
+          margin: 0 0 12px 0;
+          font-family: var(--serif, 'Cormorant Garamond', serif);
+          font-size: 22px;
+          color: #b02a31;
+        }
+
+        p{
+          margin: 0 0 18px 0;
+          font-size: 15px;
+          color: rgba(109, 73, 51, 0.88);
+        }
+
+        button{
+          padding: 11px 22px;
+        }
+      </style>
+      <div class="backdrop" part="backdrop">
+        <div class="dialog" part="dialog" role="dialog" aria-modal="true" aria-labelledby="prizeTitle" aria-describedby="prizeMessage">
+          <h3 id="prizeTitle">Puzzle Complete!</h3>
+          <p id="prizeMessage">See Benny Boo For Your Prize</p>
+          <button type="button" id="prizeClose">Got it!</button>
+        </div>
+      </div>
+    `;
+
+    this._backdrop = this.shadowRoot.querySelector(".backdrop");
+    this._dialog = this.shadowRoot.querySelector(".dialog");
+    this._messageEl = this.shadowRoot.querySelector("#prizeMessage");
+    this._closeBtn = this.shadowRoot.querySelector("#prizeClose");
+
+    if (this._backdrop) {
+      this._backdrop.addEventListener("click", (evt) => {
+        if (evt.target === this._backdrop) {
+          this.hide();
+        }
+      });
+    }
+
+    if (this._closeBtn) {
+      this._closeBtn.addEventListener("click", () => this.hide());
+    }
+  }
+
+  _setMessage(msg) {
+    if (this._messageEl) {
+      this._messageEl.textContent = msg;
+    }
+  }
+
+  _handleKeydown(evt) {
+    if (evt.key === "Escape") {
+      evt.preventDefault();
+      this.hide();
+    }
+  }
+}
+
+customElements.define("prize-modal", PrizeModal);
+
+if (typeof document !== "undefined") {
+  document.addEventListener("morse-solved", () => {
+    const player = document.querySelector("morse-player");
+    if (player && typeof player.minimize === "function") {
+      player.minimize();
+    }
+    const gallery = document.querySelector("photo-gallery");
+    if (gallery && typeof gallery.reveal === "function") {
+      gallery.reveal();
+    }
+    const prize = document.querySelector("prize-modal");
+    if (prize && typeof prize.show === "function") {
+      prize.show("See Benny Boo For Your Prize");
+    }
+  });
+}
