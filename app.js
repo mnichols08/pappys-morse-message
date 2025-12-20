@@ -1977,16 +1977,20 @@ class PrizeModal extends HTMLElement {
         }
 
         .dialog{
-          background: linear-gradient(150deg, rgba(255,255,255,0.97), rgba(255, 235, 214, 0.92));
-          border-radius: 18px;
-          padding: 26px;
-          border: 2px solid rgba(199, 47, 56, 0.35);
-          box-shadow: 0 30px 45px rgba(0,0,0,0.22);
-          width: min(360px, 88%);
+          background:
+            radial-gradient(circle at top, rgba(255,248,240,0.96), rgba(255,229,214,0.85)),
+            linear-gradient(150deg, rgba(255,255,255,0.98), rgba(255, 235, 214, 0.9));
+          border-radius: 22px;
+          padding: 32px 28px 30px;
+          border: 2px solid rgba(199, 47, 56, 0.4);
+          box-shadow:
+            0 22px 45px rgba(0,0,0,0.15),
+            inset 0 0 0 1px rgba(255,255,255,0.45);
+          width: min(380px, 90%);
           text-align: center;
-          transform: translateY(10px) scale(0.95);
+          transform: translateY(14px) scale(0.92);
           opacity: 0;
-          transition: transform 200ms ease, opacity 200ms ease;
+          transition: transform 240ms ease, opacity 220ms ease;
         }
 
         .dialog.show{
@@ -1995,20 +1999,47 @@ class PrizeModal extends HTMLElement {
         }
 
         h3{
-          margin: 0 0 12px 0;
+          margin: 0 0 14px 0;
           font-family: var(--serif, 'Cormorant Garamond', serif);
-          font-size: 22px;
+          font-size: 26px;
           color: #b02a31;
+          text-shadow: 0 2px 0 rgba(255,255,255,0.6);
         }
 
         p{
-          margin: 0 0 18px 0;
-          font-size: 15px;
+          margin: 0 0 24px 0;
+          font-size: 16px;
           color: rgba(109, 73, 51, 0.88);
+          line-height: 1.6;
         }
 
         button{
-          padding: 11px 22px;
+          padding: 12px 26px;
+          font-size: 16px;
+          font-weight: 600;
+          border-radius: 999px;
+          border: 1px solid rgba(62, 110, 76, 0.45);
+          color: #1f4f33;
+          background:
+            linear-gradient(135deg, rgba(62, 110, 76, 0.28), rgba(62,110,76,0.42));
+          box-shadow:
+            0 14px 24px rgba(62,110,76,0.28),
+            inset 0 1px 0 rgba(255,255,255,0.6);
+          transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+        }
+
+        button:hover{
+          box-shadow:
+            0 18px 28px rgba(62,110,76,0.32),
+            inset 0 1px 0 rgba(255,255,255,0.7);
+          filter: brightness(1.03);
+        }
+
+        button:active{
+          transform: translateY(1px) scale(0.98);
+          box-shadow:
+            0 12px 20px rgba(62,110,76,0.24),
+            inset 0 1px 0 rgba(255,255,255,0.55);
         }
       </style>
       <div class="backdrop" part="backdrop">
