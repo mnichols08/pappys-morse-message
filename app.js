@@ -829,23 +829,37 @@ class MorsePlayer extends HTMLElement {
 
         button{
           appearance: none;
-          border: 1px solid rgba(199, 47, 56, 0.35);
-          background: linear-gradient(145deg, rgba(255,255,255,0.85), rgba(255, 223, 207, 0.85));
-          color: var(--accent);
+          border: 1px solid rgba(199, 47, 56, 0.32);
+          background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255, 229, 214, 0.82));
           border-radius: 999px;
-          padding: 12px 18px;
-          font-size: 15px;
+          padding: 11px 18px;
+          color: #b02a31;
           font-weight: 600;
+          letter-spacing: 0.02em;
+          box-shadow: 0 14px 24px rgba(0,0,0,0.1);
           cursor: pointer;
-          transition: transform 140ms ease, background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-          box-shadow: 0 10px 18px rgba(0,0,0,0.08);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
         }
-        button:active{ transform: translateY(1px) scale(0.99); }
-        button:hover{ box-shadow: 0 16px 26px rgba(0,0,0,0.15); }
-        button.primary{
-          background: linear-gradient(145deg, rgba(62, 110, 76, 0.2), rgba(62, 110, 76, 0.36));
-          border-color: rgba(62, 110, 76, 0.45);
-          color: #1f4f33;
+
+        button:hover{
+          box-shadow: 0 18px 28px rgba(0,0,0,0.14);
+          filter: brightness(1.02);
+        }
+
+        button:active{
+          transform: translateY(1px) scale(0.98);
+          box-shadow: 0 10px 18px rgba(0,0,0,0.12);
+        }
+
+        button:disabled{
+          opacity: 0.45;
+          cursor: not-allowed;
+          box-shadow: none;
+          filter: none;
         }
         button.danger{
           background: linear-gradient(145deg, rgba(199, 47, 56, 0.24), rgba(199, 47, 56, 0.34));
@@ -1703,6 +1717,20 @@ class PhotoGallery extends HTMLElement {
     this._cards = [];
     this._thumbButtons = [];
     this._resizeHandler = null;
+    this._lightbox = null;
+    this._lightboxImg = null;
+    this._lightboxViewport = null;
+    this._lightboxClose = null;
+    this._lightboxPrev = null;
+    this._lightboxNext = null;
+    this._zoomInBtn = null;
+    this._zoomOutBtn = null;
+    this._zoomStatus = null;
+    this._lightboxBackdrop = null;
+    this._lightboxKeydownHandler = null;
+    this._updateZoomStatus = null;
+    this._lightboxIndex = 0;
+    this._zoomLevel = 1;
   }
 
   static get observedAttributes() {
@@ -1721,6 +1749,9 @@ class PhotoGallery extends HTMLElement {
     if (typeof window !== "undefined" && this._resizeHandler) {
       window.removeEventListener("resize", this._resizeHandler);
       this._resizeHandler = null;
+    }
+    if (typeof document !== "undefined" && this._lightboxKeydownHandler) {
+      document.removeEventListener("keydown", this._lightboxKeydownHandler);
     }
   }
 
@@ -1786,9 +1817,9 @@ class PhotoGallery extends HTMLElement {
       <style>
         :host{
           display:block;
-          margin: 40px auto 0;
-          max-width: 900px;
-          padding: 0 20px 40px;
+          margin: 60px auto 0;
+          width: min(85vw, 1100px);
+          padding: 0 12px 60px;
         }
 
         :host([hidden]){
@@ -1862,8 +1893,9 @@ class PhotoGallery extends HTMLElement {
           overflow: hidden;
           border-radius: 22px;
           border: 1px solid rgba(199, 47, 56, 0.28);
-          background: rgba(255,255,255,0.85);
-          box-shadow: inset 0 0 18px rgba(255, 226, 209, 0.5);
+          background: rgba(255,255,255,0.9);
+          box-shadow: inset 0 0 22px rgba(255, 226, 209, 0.55);
+          height: clamp(420px, 80vh, 860px);
         }
 
         .track{
@@ -1874,48 +1906,58 @@ class PhotoGallery extends HTMLElement {
 
         .card{
           flex: 0 0 100%;
-          display:grid;
-          grid-template-columns: minmax(0,1fr);
-          gap: 12px;
-          padding: 18px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding: 24px;
+          height: 100%;
         }
 
         figure{
           margin:0;
-          background: linear-gradient(160deg, rgba(255,255,255,0.94), rgba(255,237,216,0.86));
-          border-radius: 18px;
-          padding: 14px;
+          width:100%;
+          height:100%;
+          background: linear-gradient(160deg, rgba(255,255,255,0.96), rgba(255,237,216,0.9));
+          border-radius: 20px;
+          padding: 18px;
           border: 1px solid rgba(199, 47, 56, 0.24);
-          box-shadow: 0 16px 28px rgba(0,0,0,0.08);
+          box-shadow: 0 18px 32px rgba(0,0,0,0.08);
+          display:grid;
+          grid-template-rows: minmax(0, 1fr) auto;
+          gap: 16px;
+        }
+
+        .photoViewport{
+          border-radius: 16px;
+          border: 2px solid rgba(62, 110, 76, 0.32);
+          background: rgba(62,110,76,0.12);
           display:flex;
-          flex-direction:column;
-          gap: 12px;
+          align-items:center;
+          justify-content:center;
+          overflow:hidden;
         }
 
         img{
           width:100%;
-          height: 180px;
-          object-fit: cover;
-          border-radius: 12px;
-          border: 2px solid rgba(62, 110, 76, 0.32);
-          background: rgba(62,110,76,0.08);
+          height:100%;
+          object-fit: contain;
         }
 
         figcaption{
           display:grid;
-          gap:6px;
+          gap:8px;
         }
 
         figcaption strong{
           font-family: var(--serif, 'Cormorant Garamond', serif);
-          font-size: 18px;
+          font-size: 22px;
           color: #2f4f3a;
         }
 
         figcaption span{
-          font-size: 13px;
-          color: rgba(109, 73, 51, 0.78);
-          line-height: 1.5;
+          font-size: 15px;
+          color: rgba(109, 73, 51, 0.82);
+          line-height: 1.55;
         }
 
         .thumbs{
@@ -1961,6 +2003,160 @@ class PhotoGallery extends HTMLElement {
             transform: translateY(0);
           }
         }
+
+        .lightbox{
+          position: fixed;
+          inset: 0;
+          display: none;
+          z-index: 80;
+        }
+
+        .lightbox.show{
+          display: block;
+        }
+
+        .lightboxBackdrop{
+          position:absolute;
+          inset:0;
+          background: rgba(24, 18, 14, 0.72);
+          backdrop-filter: blur(6px);
+        }
+
+        .lightboxDialog{
+          position:absolute;
+          inset: 40px 5vw 40px 5vw;
+          background: linear-gradient(160deg, rgba(255,255,255,0.98), rgba(255, 235, 214, 0.92));
+          border-radius: 24px;
+          border: 2px solid rgba(199,47,56,0.4);
+          box-shadow: 0 40px 60px rgba(0,0,0,0.35);
+          display:flex;
+          flex-direction:column;
+          gap: 16px;
+          padding: 24px;
+        }
+
+        .lightboxHeader{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 12px;
+        }
+
+        .lightboxTitle{
+          font-family: var(--serif, 'Cormorant Garamond', serif);
+          font-size: 24px;
+          color: #b02a31;
+          margin: 0;
+        }
+
+        .closeBtn{
+          appearance:none;
+          border:1px solid rgba(199, 47, 56, 0.35);
+          background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255, 229, 214, 0.9));
+          border-radius: 999px;
+          padding: 8px 16px;
+          font-weight:600;
+          cursor:pointer;
+          box-shadow: 0 12px 22px rgba(0,0,0,0.12);
+        }
+
+        .lightboxViewport{
+          position: relative;
+          flex: 1 1 auto;
+          overflow:hidden;
+          border-radius: 18px;
+          border: 1px solid rgba(199, 47, 56, 0.28);
+          background: rgba(10,10,10,0.2);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+        }
+
+        .lightboxImg{
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          transition: transform 120ms ease;
+          transform: scale(1);
+        }
+
+        .lightboxControls{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+
+        .lightboxNav{
+          display:flex;
+          align-items:center;
+          gap: 10px;
+        }
+
+        .lightboxNav button,
+        .zoomBtn{
+          appearance:none;
+          border:1px solid rgba(62,110,76,0.4);
+          background: linear-gradient(135deg, rgba(62,110,76,0.22), rgba(62,110,76,0.4));
+          border-radius: 999px;
+          padding: 10px 18px;
+          color: #1f4f33;
+          font-weight:600;
+          cursor:pointer;
+          box-shadow: 0 14px 24px rgba(62,110,76,0.24);
+          transition: transform 120ms ease, box-shadow 120ms ease;
+        }
+
+        .lightboxNav button:disabled{
+          opacity: 0.45;
+          cursor:not-allowed;
+          box-shadow:none;
+        }
+
+        .lightboxNav button:hover:not(:disabled),
+        .zoomBtn:hover{
+          box-shadow: 0 18px 28px rgba(62,110,76,0.3);
+        }
+
+        .lightboxNav button:active:not(:disabled),
+        .zoomBtn:active{
+          transform: translateY(1px) scale(0.98);
+          box-shadow: 0 10px 18px rgba(62,110,76,0.2);
+        }
+
+        .zoomStatus{
+          font-family: var(--mono, 'Fira Code', monospace);
+          font-size: 13px;
+          color: rgba(62,110,76,0.85);
+        }
+
+        @media (max-width: 920px){
+          .lightboxDialog{
+            inset: 20px 4vw 20px 4vw;
+            padding: 18px;
+          }
+        }
+
+        @media (max-width: 720px){
+          :host{
+            width: 100%;
+            padding: 0 16px 50px;
+          }
+          .gallery{
+            height: min(70vh, 520px);
+          }
+          figure{
+            padding: 14px;
+            gap: 12px;
+          }
+          figcaption strong{
+            font-size: 18px;
+          }
+          figcaption span{
+            font-size: 13px;
+          }
+        }
       </style>
       <section aria-label="Family photo gallery">
         <h2>Holiday Photo Gallery</h2>
@@ -1979,9 +2175,11 @@ class PhotoGallery extends HTMLElement {
                   idx + 1
                 }">
                     <figure>
-                      <img src="${photo.src}" alt="${
+                      <div class="photoViewport">
+                        <img src="${photo.src}" alt="${
                   photo.alt
-                }" loading="lazy" />
+                }" loading="lazy" data-index="${idx}" />
+                      </div>
                       <figcaption>
                         <strong>${photo.title}</strong>
                         <span>${photo.description}</span>
@@ -2006,6 +2204,29 @@ class PhotoGallery extends HTMLElement {
             )
             .join("")}
         </div>
+        <div class="lightbox" id="lightbox" hidden>
+          <div class="lightboxBackdrop"></div>
+          <div class="lightboxDialog" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
+            <div class="lightboxHeader">
+              <h3 class="lightboxTitle" id="lightboxTitle">Photo view</h3>
+              <button class="closeBtn" type="button" id="lightboxClose">Close</button>
+            </div>
+            <div class="lightboxViewport" id="lightboxViewport">
+              <img class="lightboxImg" id="lightboxImg" src="" alt="" />
+            </div>
+            <div class="lightboxControls">
+              <div class="lightboxNav">
+                <button type="button" id="lightboxPrev">◀ Prev</button>
+                <button type="button" id="lightboxNext">Next ▶</button>
+              </div>
+              <div class="lightboxNav">
+                <button type="button" class="zoomBtn" id="zoomOut">- Zoom</button>
+                <button type="button" class="zoomBtn" id="zoomIn">+ Zoom</button>
+              </div>
+              <span class="zoomStatus" id="zoomStatus">Zoom 100%</span>
+            </div>
+          </div>
+        </div>
       </section>
     `;
   }
@@ -2019,6 +2240,16 @@ class PhotoGallery extends HTMLElement {
     this._cards = Array.from(this.shadowRoot.querySelectorAll(".card"));
     const thumbs = this.shadowRoot.querySelector("#thumbs");
     this._thumbButtons = Array.from(this.shadowRoot.querySelectorAll(".thumb"));
+    this._lightbox = this.shadowRoot.querySelector("#lightbox");
+    this._lightboxImg = this.shadowRoot.querySelector("#lightboxImg");
+    this._lightboxViewport = this.shadowRoot.querySelector("#lightboxViewport");
+    this._lightboxClose = this.shadowRoot.querySelector("#lightboxClose");
+    this._lightboxPrev = this.shadowRoot.querySelector("#lightboxPrev");
+    this._lightboxNext = this.shadowRoot.querySelector("#lightboxNext");
+    this._zoomInBtn = this.shadowRoot.querySelector("#zoomIn");
+    this._zoomOutBtn = this.shadowRoot.querySelector("#zoomOut");
+    this._zoomStatus = this.shadowRoot.querySelector("#zoomStatus");
+    this._lightboxBackdrop = this.shadowRoot.querySelector(".lightboxBackdrop");
 
     const onNav = (dir) => {
       if (!this._cards.length) return;
@@ -2047,6 +2278,32 @@ class PhotoGallery extends HTMLElement {
       });
     });
 
+    this._cards.forEach((card) => {
+      const img = card.querySelector("img");
+      if (img) {
+        img.style.cursor = "zoom-in";
+        img.setAttribute("role", "button");
+        img.setAttribute("aria-label", "View photo full size");
+        img.tabIndex = 0;
+        img.addEventListener("click", () => {
+          const idx = Number(img.dataset.index || "0");
+          this._openLightbox(Number.isNaN(idx) ? 0 : idx);
+        });
+        img.addEventListener("keydown", (evt) => {
+          if (
+            evt.key === "Enter" ||
+            evt.key === " " ||
+            evt.key === "Spacebar" ||
+            evt.key === "Space"
+          ) {
+            evt.preventDefault();
+            const idx = Number(img.dataset.index || "0");
+            this._openLightbox(Number.isNaN(idx) ? 0 : idx);
+          }
+        });
+      }
+    });
+
     if (thumbs) {
       thumbs.addEventListener("keydown", (evt) => {
         if (!this._thumbButtons.length) return;
@@ -2073,6 +2330,8 @@ class PhotoGallery extends HTMLElement {
       this._resizeHandler = () => this._scrollToActive(true);
       window.addEventListener("resize", this._resizeHandler, { passive: true });
     }
+
+    this._setupLightbox();
   }
 
   _scrollToActive(skipFocus = false) {
@@ -2118,6 +2377,179 @@ class PhotoGallery extends HTMLElement {
       this._status.textContent = total
         ? `Photo ${this._activeIndex + 1} of ${total}`
         : "";
+    }
+  }
+
+  _setupLightbox() {
+    this._zoomLevel = 1;
+    this._lightboxIndex = 0;
+
+    if (!this._lightbox || !this._lightboxImg || !this._lightboxViewport) {
+      return;
+    }
+
+    if (this._lightbox) {
+      this._lightbox.classList.remove("show");
+      this._lightbox.hidden = true;
+      this._lightbox.setAttribute("aria-hidden", "true");
+    }
+    if (this._lightboxImg) {
+      this._lightboxImg.style.transform = "scale(1)";
+      this._lightboxImg.style.transformOrigin = "50% 50%";
+    }
+
+    if (typeof document !== "undefined" && this._lightboxKeydownHandler) {
+      document.removeEventListener("keydown", this._lightboxKeydownHandler);
+    }
+
+    const updateZoomStatus = () => {
+      if (this._zoomStatus) {
+        this._zoomStatus.textContent = `Zoom ${Math.round(
+          this._zoomLevel * 100
+        )}%`;
+      }
+      if (this._lightboxImg) {
+        this._lightboxImg.style.transform = `scale(${this._zoomLevel})`;
+      }
+    };
+    this._updateZoomStatus = updateZoomStatus;
+
+    const zoomIn = () => {
+      this._zoomLevel = Math.min(this._zoomLevel + 0.35, 3.5);
+      updateZoomStatus();
+    };
+
+    const zoomOut = () => {
+      this._zoomLevel = Math.max(this._zoomLevel - 0.35, 1);
+      updateZoomStatus();
+    };
+
+    if (this._zoomInBtn) {
+      this._zoomInBtn.addEventListener("click", zoomIn);
+    }
+    if (this._zoomOutBtn) {
+      this._zoomOutBtn.addEventListener("click", zoomOut);
+    }
+
+    if (this._lightboxClose) {
+      this._lightboxClose.addEventListener("click", () =>
+        this._closeLightbox()
+      );
+    }
+    if (this._lightboxBackdrop) {
+      this._lightboxBackdrop.addEventListener("click", () =>
+        this._closeLightbox()
+      );
+    }
+    if (this._lightboxPrev) {
+      this._lightboxPrev.addEventListener("click", () => this._lightboxNav(-1));
+    }
+    if (this._lightboxNext) {
+      this._lightboxNext.addEventListener("click", () => this._lightboxNav(1));
+    }
+
+    if (this._lightboxViewport) {
+      const handlePointer = (evt) => {
+        if (!this._lightboxImg || this._zoomLevel <= 1) return;
+        const rect = this._lightboxViewport.getBoundingClientRect();
+        const x = ((evt.clientX - rect.left) / rect.width) * 100;
+        const y = ((evt.clientY - rect.top) / rect.height) * 100;
+        this._lightboxImg.style.transformOrigin = `${x}% ${y}%`;
+      };
+      this._lightboxViewport.addEventListener("mousemove", handlePointer);
+      this._lightboxViewport.addEventListener(
+        "touchmove",
+        (evt) => {
+          if (!evt.touches || !evt.touches.length) return;
+          const touch = evt.touches[0];
+          handlePointer({ clientX: touch.clientX, clientY: touch.clientY });
+        },
+        { passive: true }
+      );
+      this._lightboxViewport.addEventListener(
+        "wheel",
+        (evt) => {
+          if (!evt) return;
+          evt.preventDefault();
+          if (evt.deltaY < 0) {
+            zoomIn();
+          } else {
+            zoomOut();
+          }
+        },
+        { passive: false }
+      );
+    }
+
+    this._lightboxKeydownHandler = (evt) => {
+      if (!this._lightbox || this._lightbox.hidden) return;
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        this._closeLightbox();
+      } else if (evt.key === "ArrowRight") {
+        this._lightboxNav(1);
+      } else if (evt.key === "ArrowLeft") {
+        this._lightboxNav(-1);
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("keydown", this._lightboxKeydownHandler);
+    }
+
+    this._updateLightboxNav();
+  }
+
+  _openLightbox(index) {
+    if (!this._lightboxImg || !this._lightbox) return;
+    const safeIndex = Math.max(0, Math.min(index, this._photos.length - 1));
+    const photo = this._photos[safeIndex];
+    if (!photo) return;
+    this._lightboxIndex = safeIndex;
+    this._lightboxImg.src = photo.src;
+    this._lightboxImg.alt = photo.alt || photo.title || "Gallery photo";
+    this._zoomLevel = 1;
+    if (typeof this._updateZoomStatus === "function") {
+      this._updateZoomStatus();
+    }
+    this._lightbox.hidden = false;
+    this._lightbox.classList.add("show");
+    this._lightbox.setAttribute("aria-hidden", "false");
+    if (this._lightboxClose) {
+      this._lightboxClose.focus({ preventScroll: true });
+    }
+    this._updateLightboxNav();
+  }
+
+  _closeLightbox() {
+    if (!this._lightbox) return;
+    this._lightbox.classList.remove("show");
+    this._lightbox.hidden = true;
+    this._lightbox.setAttribute("aria-hidden", "true");
+  }
+
+  _lightboxNav(delta) {
+    const nextIndex = this._lightboxIndex + delta;
+    if (nextIndex < 0 || nextIndex >= this._photos.length) return;
+    this._openLightbox(nextIndex);
+  }
+
+  _updateLightboxNav() {
+    const total = this._photos.length;
+    const atStart = this._lightboxIndex <= 0;
+    const atEnd = this._lightboxIndex >= total - 1;
+    if (this._lightboxPrev) {
+      this._lightboxPrev.disabled = atStart;
+      this._lightboxPrev.setAttribute(
+        "aria-disabled",
+        atStart ? "true" : "false"
+      );
+    }
+    if (this._lightboxNext) {
+      this._lightboxNext.disabled = atEnd;
+      this._lightboxNext.setAttribute(
+        "aria-disabled",
+        atEnd ? "true" : "false"
+      );
     }
   }
 }
