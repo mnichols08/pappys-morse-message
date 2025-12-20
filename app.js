@@ -1694,6 +1694,15 @@ class PhotoGallery extends HTMLElement {
     super();
     this.attachShadow({ mode: "open" });
     this._photos = [];
+    this._activeIndex = 0;
+    this._track = null;
+    this._galleryEl = null;
+    this._prevBtn = null;
+    this._nextBtn = null;
+    this._status = null;
+    this._cards = [];
+    this._thumbButtons = [];
+    this._resizeHandler = null;
   }
 
   static get observedAttributes() {
@@ -1704,12 +1713,23 @@ class PhotoGallery extends HTMLElement {
     this._applyHiddenState();
     this._hydratePhotos(this.getAttribute("data-images"));
     this._render();
+    this._wire();
+    this._updateControls();
+  }
+
+  disconnectedCallback() {
+    if (typeof window !== "undefined" && this._resizeHandler) {
+      window.removeEventListener("resize", this._resizeHandler);
+      this._resizeHandler = null;
+    }
   }
 
   attributeChangedCallback(name, _oldVal, newVal) {
     if (name === "data-images") {
       this._hydratePhotos(newVal);
       this._render();
+      this._wire();
+      this._updateControls();
     }
   }
 
@@ -1726,37 +1746,38 @@ class PhotoGallery extends HTMLElement {
   }
 
   _hydratePhotos(raw) {
-    if (!raw) {
-      this._photos = [
-        {
-          src: "images/festive-card.png",
-          alt: "Festive holiday postcard illustration",
-          title: "Holiday Keepsake",
-          description:
-            "Pappy's treasured Morse card framed for our family album.",
-        },
-      ];
-      return;
+    const parsed = [];
+    if (raw) {
+      raw
+        .split(";")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .forEach((entry) => {
+          const [src, title = "", description = "", alt = ""] = entry
+            .split("|")
+            .map((part) => part.trim());
+          if (!src) return;
+          parsed.push({
+            src,
+            title: title || "Holiday memory",
+            description: description || "",
+            alt: alt || title || "Gallery photo",
+          });
+        });
     }
 
-    const parsed = raw
-      .split(";")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const [src, title = "", description = "", alt = ""] = entry
-          .split("|")
-          .map((part) => part.trim());
-        return {
-          src,
-          title: title || "Holiday memory",
-          description: description || "",
-          alt: alt || title || "Gallery photo",
-        };
-      })
-      .filter((item) => !!item.src);
+    if (!parsed.length) {
+      parsed.push({
+        src: "images/festive-card.png",
+        alt: "Festive holiday postcard illustration",
+        title: "Holiday Keepsake",
+        description:
+          "Pappy's treasured Morse card framed for our family album.",
+      });
+    }
 
-    this._photos = parsed.length ? parsed : this._photos;
+    this._photos = parsed;
+    this._activeIndex = 0;
   }
 
   _render() {
@@ -1793,12 +1814,70 @@ class PhotoGallery extends HTMLElement {
           font-size: 15px;
         }
 
+        .chrome{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 12px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+
+        .navBtn{
+          appearance:none;
+          border:1px solid rgba(199, 47, 56, 0.32);
+          background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255, 229, 214, 0.82));
+          border-radius: 999px;
+          padding: 10px 16px;
+          color: #b02a31;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 12px 22px rgba(0,0,0,0.08);
+          cursor: pointer;
+          transition: transform 140ms ease, box-shadow 140ms ease;
+        }
+
+        .navBtn:hover{
+          box-shadow: 0 16px 26px rgba(0,0,0,0.12);
+        }
+
+        .navBtn:active{
+          transform: translateY(1px) scale(0.98);
+        }
+
+        .navBtn:disabled{
+          opacity: 0.45;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        .status{
+          font-family: var(--mono, "Fira Code", monospace);
+          font-size: 13px;
+          color: rgba(62,110,76,0.85);
+        }
+
         .gallery{
+          position: relative;
+          overflow: hidden;
+          border-radius: 22px;
+          border: 1px solid rgba(199, 47, 56, 0.28);
+          background: rgba(255,255,255,0.85);
+          box-shadow: inset 0 0 18px rgba(255, 226, 209, 0.5);
+        }
+
+        .track{
+          display:flex;
+          transition: transform 320ms ease;
+          will-change: transform;
+        }
+
+        .card{
+          flex: 0 0 100%;
           display:grid;
-          gap: 16px;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          opacity: 0;
-          transform: translateY(12px);
+          grid-template-columns: minmax(0,1fr);
+          gap: 12px;
+          padding: 18px;
         }
 
         figure{
@@ -1839,10 +1918,43 @@ class PhotoGallery extends HTMLElement {
           line-height: 1.5;
         }
 
+        .thumbs{
+          display:flex;
+          gap: 8px;
+          margin-top: 14px;
+          justify-content:center;
+          flex-wrap: wrap;
+        }
+
+        .thumb{
+          width: 56px;
+          height: 56px;
+          border-radius: 12px;
+          border: 2px solid transparent;
+          overflow:hidden;
+          cursor:pointer;
+          transition: transform 140ms ease, border-color 140ms ease;
+        }
+
+        .thumb img{
+          width:100%;
+          height:100%;
+          object-fit: cover;
+        }
+
+        .thumb.active{
+          border-color: rgba(62,110,76,0.55);
+          transform: translateY(-2px);
+        }
+
+        :host(.is-visible) .gallery{
+          animation: galleryReveal 420ms ease-out forwards;
+        }
+
         @keyframes galleryReveal{
           0%{
             opacity: 0;
-            transform: translateY(12px);
+            transform: translateY(16px);
           }
           100%{
             opacity: 1;
@@ -1853,23 +1965,160 @@ class PhotoGallery extends HTMLElement {
       <section aria-label="Family photo gallery">
         <h2>Holiday Photo Gallery</h2>
         <p class="lead">A peek behind the scenes once the Morse puzzle is cracked.</p>
-        <div class="gallery">
+        <div class="chrome">
+          <button class="navBtn" data-dir="prev" type="button">◀ Prev</button>
+          <span class="status" aria-live="polite"></span>
+          <button class="navBtn" data-dir="next" type="button">Next ▶</button>
+        </div>
+        <div class="gallery" role="group" aria-roledescription="carousel">
+          <div class="track" id="galleryTrack">
+            ${photos
+              .map(
+                (photo, idx) => `
+                  <article class="card" data-index="${idx}" role="group" aria-roledescription="slide" aria-label="Slide ${
+                  idx + 1
+                }">
+                    <figure>
+                      <img src="${photo.src}" alt="${
+                  photo.alt
+                }" loading="lazy" />
+                      <figcaption>
+                        <strong>${photo.title}</strong>
+                        <span>${photo.description}</span>
+                      </figcaption>
+                    </figure>
+                  </article>
+                `
+              )
+              .join("")}
+          </div>
+        </div>
+        <div class="thumbs" id="thumbs">
           ${photos
             .map(
-              (photo) => `
-                <figure>
+              (photo, idx) => `
+                <button class="thumb" type="button" data-index="${idx}" aria-label="Show slide ${
+                idx + 1
+              }">
                   <img src="${photo.src}" alt="${photo.alt}" loading="lazy" />
-                  <figcaption>
-                    <strong>${photo.title}</strong>
-                    <span>${photo.description}</span>
-                  </figcaption>
-                </figure>
+                </button>
               `
             )
             .join("")}
         </div>
       </section>
     `;
+  }
+
+  _wire() {
+    this._track = this.shadowRoot.querySelector("#galleryTrack");
+    this._galleryEl = this.shadowRoot.querySelector(".gallery");
+    this._prevBtn = this.shadowRoot.querySelector('[data-dir="prev"]');
+    this._nextBtn = this.shadowRoot.querySelector('[data-dir="next"]');
+    this._status = this.shadowRoot.querySelector(".status");
+    this._cards = Array.from(this.shadowRoot.querySelectorAll(".card"));
+    const thumbs = this.shadowRoot.querySelector("#thumbs");
+    this._thumbButtons = Array.from(this.shadowRoot.querySelectorAll(".thumb"));
+
+    const onNav = (dir) => {
+      if (!this._cards.length) return;
+      if (dir === "prev" && this._activeIndex > 0) {
+        this._activeIndex--;
+      } else if (dir === "next" && this._activeIndex < this._cards.length - 1) {
+        this._activeIndex++;
+      }
+      this._scrollToActive();
+    };
+
+    if (this._prevBtn) {
+      this._prevBtn.addEventListener("click", () => onNav("prev"));
+    }
+    if (this._nextBtn) {
+      this._nextBtn.addEventListener("click", () => onNav("next"));
+    }
+
+    this._thumbButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.index || "0");
+        if (!Number.isNaN(idx)) {
+          this._activeIndex = idx;
+          this._scrollToActive();
+        }
+      });
+    });
+
+    if (thumbs) {
+      thumbs.addEventListener("keydown", (evt) => {
+        if (!this._thumbButtons.length) return;
+        const current = this._thumbButtons.indexOf(document.activeElement);
+        if (current === -1) return;
+        if (evt.key === "ArrowRight") {
+          evt.preventDefault();
+          const next = Math.min(current + 1, this._thumbButtons.length - 1);
+          this._thumbButtons[next].focus({ preventScroll: true });
+        } else if (evt.key === "ArrowLeft") {
+          evt.preventDefault();
+          const prev = Math.max(current - 1, 0);
+          this._thumbButtons[prev].focus({ preventScroll: true });
+        }
+      });
+    }
+
+    this._scrollToActive(true);
+
+    if (typeof window !== "undefined") {
+      if (this._resizeHandler) {
+        window.removeEventListener("resize", this._resizeHandler);
+      }
+      this._resizeHandler = () => this._scrollToActive(true);
+      window.addEventListener("resize", this._resizeHandler, { passive: true });
+    }
+  }
+
+  _scrollToActive(skipFocus = false) {
+    if (!this._track || !this._cards.length) return;
+    const viewportWidth = this._galleryEl
+      ? this._galleryEl.getBoundingClientRect().width
+      : this._track.getBoundingClientRect().width;
+    const offset = this._activeIndex * viewportWidth;
+    this._track.style.transform = `translateX(-${offset}px)`;
+    this._cards.forEach((card, idx) => {
+      const isActive = idx === this._activeIndex;
+      card.classList.toggle("active", isActive);
+      card.setAttribute("aria-hidden", isActive ? "false" : "true");
+    });
+    this._thumbButtons.forEach((btn, idx) => {
+      const isActive = idx === this._activeIndex;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      btn.setAttribute("aria-current", isActive ? "true" : "false");
+    });
+    this._updateControls();
+    if (!skipFocus && this._cards[this._activeIndex]) {
+      const focusable = this._cards[this._activeIndex].querySelector("strong");
+      if (focusable && typeof focusable.focus === "function") {
+        focusable.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  _updateControls() {
+    const total = this._cards.length;
+    if (this._prevBtn) {
+      const disabled = this._activeIndex <= 0;
+      this._prevBtn.disabled = disabled;
+      this._prevBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    }
+    if (this._nextBtn) {
+      const disabled = this._activeIndex >= total - 1;
+      this._nextBtn.disabled = disabled;
+      this._nextBtn.setAttribute("aria-disabled", disabled ? "true" : "false");
+    }
+    if (this._status) {
+      this._status.textContent = total
+        ? `Photo ${this._activeIndex + 1} of ${total}`
+        : "";
+    }
   }
 }
 
