@@ -764,14 +764,16 @@ class MorsePlayer extends HTMLElement {
 
         @keyframes confettiFall{
           0%{
-            transform: translate3d(0, -120%, 0) rotate(0deg);
+            top: -12%;
+            transform: translateX(0px) rotate(0deg);
             opacity: 0;
           }
           10%{
             opacity: 1;
           }
           100%{
-            transform: translate3d(var(--confetti-sway, 0px), 140%, 0) rotate(var(--confetti-rotate, 720deg));
+            top: 112%;
+            transform: translateX(var(--confetti-sway, 0px)) rotate(var(--confetti-rotate, 720deg));
             opacity: 0;
           }
         }
@@ -1305,6 +1307,15 @@ class MorsePlayer extends HTMLElement {
         this._revealHint.textContent = "Reveal shows the answer instantly.";
       }
     }
+
+    if (
+      this.state.revealed &&
+      !this._hasCelebrated &&
+      totalWords &&
+      this._revealedWordIndices.size >= totalWords
+    ) {
+      this._triggerCelebration();
+    }
   }
 
   _renderDecodedWords() {
@@ -1417,8 +1428,8 @@ class MorsePlayer extends HTMLElement {
       this._closeRevealModal();
       return;
     }
-    this._revealAllWords();
     this._hasCelebrated = true;
+    this._revealAllWords();
     this._setGuessStatus("Message revealed.");
     this._closeRevealModal();
   }
